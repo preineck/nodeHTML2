@@ -1,0 +1,11 @@
+{
+    "server": "192.168.202.50",
+    "database": "OMNI_OH_PWH_STAGING",
+    "user": "preineck",
+    "password": "158hjKu93",
+    
+    "options": {
+       "instanceName": "DEV"
+   }
+   }
+   

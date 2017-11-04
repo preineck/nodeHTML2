@@ -1,0 +1,24 @@
+{
+  "name": "htmlparser2",
+  "version": "1.0.0",
+  "description": "revised HTML scraper",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/preineck/nodeHTML2.git"
+  },
+  "author": "paul reineck",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/preineck/nodeHTML2/issues"
+  },
+  "homepage": "https://github.com/preineck/nodeHTML2#readme",
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.2",
+    "cheerio-tableparser": "^1.0.1",
+    "mssql": "^4.1.0"
+  }
+}
