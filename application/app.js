@@ -7,7 +7,6 @@ const outputFileSurgicalHx = "C:\\Users\\paulr\\Google Drive\\nodeHTML2\\nodeHTM
 const outputFileVaccine = "C:\\Users\\paulr\\Google Drive\\nodeHTML2\\nodeHTML2\\application\\samples\\outputVaccine.txt";
 const outputFilehxPregnancies = "C:\\Users\\paulr\\Google Drive\\nodeHTML2\\nodeHTML2\\application\\samples\\outputHxPregnanices.txt";
 
-
 // Controls
 var debug = 1;
 var printDemo;
@@ -17,7 +16,6 @@ var printSurgHx ;
 var writeSurgHx;
 var printVaccine;
 var writeVaccine=1;
-
 
 // File to Parse
 var html = fs.readFileSync(sampleFilePath).toString();
@@ -30,7 +28,18 @@ var sectionContent;
 var sqlEncounterInserts = [];
 var sqlDemoInserts = [];
 var sqlClinicalInserts = [];
-
+var connString = {
+    "server": "192.168.202.50",
+    "database": "OMNI_OH_PWH_STAGING",
+    "user": "preineck",
+    "password": "158hjKu93",
+    
+    "options": {
+       "instanceName": "DEV"
+   }
+   }
+   
+   
 $ = cheerio.load(html);
 
 // Get patient ID:
@@ -121,7 +130,6 @@ $('.medicationtable').each(function (i,td) {
     if (contents.length>1){
         medData[i] = contents.replace('NameDateSource','').trim().split("\n");
     }
-    
 })
 var uniqueRx = [...new Set(medData)];
 uniqueRx.forEach( (item)=>sqlClinicalInserts.push(`insert into [nodeHTML].[clinical_extraction] (patientId, sectionName, sectionContent) values ('${patientID}','Medications','${item}')`));
@@ -154,13 +162,17 @@ $('tr','.clinical_patient_vaccinelist_htmlsummary_sub').each(function (i,tr){
          ,"VIS Given": vaccVISGiven.text().replace(/\n/,'').trim()
          ,"Vaccinator": vaccinator.text().replace(/\n/,'').trim()
     }
-    vaccines.push(row);
+    if (row.VaccineType != "Vaccine Type")
+    {
+        vaccines.push(JSON.stringify(row));
+    }
+    
 //    console.log(row);
 });
 var uniqueVaccines = [...new Set(vaccines)];
 for (var i =0; i<uniqueVaccines.length; i++)
 {
-    if (uniqueVaccines[i].Date && uniqueVaccines[i].VaccineType != "Vaccine Type")
+    if (uniqueVaccines[i].VaccineType != "Vaccine Type")
     {
         sqlClinicalInserts.push(`insert into [nodeHTML].[clinical_extraction] (patientId, sectionName, sectionContent) values ('${patientID}','Vaccinations','${uniqueVaccines[i]}')`)
         //console.log(i,uniqueVaccines[i]);
@@ -191,9 +203,10 @@ const famHx = [];
 $('.familyhxtable','.clinicalsummarybox').each(function (i,elem) {
     famHx[i] = $(this).text().replace('\'', '\'\'').replace(/\n/,'').replace(/'/g, '');
 })
-for (var i=0; i<famHx.length;i++)
+var uniqueFamHx = [...new Set(famHx)];
+for (var i=0; i<uniqueFamHx.length;i++)
 {
-    sqlClinicalInserts.push(`insert into [nodeHTML].[clinical_extraction] (patientId, sectionName, sectionContent) values ('${patientID}','FamilyHx','${famHx[i]}')`);
+    sqlClinicalInserts.push(`insert into [nodeHTML].[clinical_extraction] (patientId, sectionName, sectionContent) values ('${patientID}','FamilyHx','${uniqueFamHx[i]}')`);
     //console.log(famHx[i]);
 }
 
@@ -218,6 +231,135 @@ for (var i=0; i<numEntries; i++)  //how many rows in table?
             hxPregnancy[elements[j]] = uniqueData[k][i+1];
         }
     }
-    hxPregnancies.push(hxPregnancy);    
+    hxPregnancy["Birth Weight"] = hxPregnancy["Birth Weight"] + hxPregnancy[""]; // ounces get dumped in a header-less column...
+    delete hxPregnancy[""];
+    hxPregnancies.push(JSON.stringify(hxPregnancy));    
 }
 hxPregnancies.forEach( (item)=>sqlClinicalInserts.push(`insert into [nodeHTML].[clinical_extraction] (patientId, sectionName, sectionContent) values ('${patientID}','HxPregnancies','${item}')`));
+
+// ENCOUNTERS
+encounterContent = [];
+$('.clinicalsummary').each(function (i,e) {
+    currentSection = $(e).attr('sectionname');
+    // This is associating way too many things with at LEAST the last DOS in the file, if not more.  Almost looks like cartesian product.  Experiment with "closest" operator
+    
+    if (currentSection)
+    {
+        if (currentSection ==="Patient")
+        {
+            var text = $(e).find('tr').find('td').eq(1).map(function() {
+            currentDOS =    $(this).text().trim();
+            }).get()
+        }
+    /*-------------------------------------------------
+    "closest" examples:
+    $('.orange').closest('#fruits')     |   $('.orange').closest('li')  |   $('.orange').closest('.apple')
+
+    -------------------------------------------------*/
+        // _currentDOS = $(e).closest('.clinicalsummary').find('tr').find('td').eq(1);
+        // currentDOS = _currentDOS.text().trim();
+        sectionContent = $(this).text().replace('~','').replace(/'/g, '').replace(/[\n\r]/g,'<br>').replace('InitializeSection( this.parentNode, 1 ); this.removeNode(true)','');   
+        encounterContent[i] = [patientID,currentDOS,currentSection,sectionContent,i];
+        // console.log(currentDOS,': ',currentSection,sectionContent);
+        // console.log('-------------------------------------------');
+        // sqlEncounterInserts[i] =  `insert into [nodeHTML].[encounter_extraction] (patientId, DOS, sectionName, sectionContent) values ('${patientID}','${currentDOS}','${currentSection}','${sectionContent}')`;
+    }
+})
+uniqueEncounters = [...new Set(encounterContent)];
+console.log(encounterContent.length,uniqueEncounters.length);
+for (var i =0; i<uniqueEncounters.length; i++)
+{
+    if (uniqueEncounters[i])
+    {
+        sqlEncounterInserts.push(`insert into [nodeHTML].[encounter_extraction] (patientId, DOS, sectionName, sectionContent, position) values ('${uniqueEncounters[i][0]}','${uniqueEncounters[i][1]}','${uniqueEncounters[i][2]}','${uniqueEncounters[i][3]}','${uniqueEncounters[i][4]}')`);
+    }
+    
+}
+
+//    INSERT TO DATABASE (SQL):
+    sql.connect(connString)
+    .then
+    (
+        (pool)=>
+        {
+            return pool.request();
+        }
+    )
+    .then
+    (
+        (req)=>
+        {
+            console.log("Demo Statements: ", sqlDemoInserts.length);
+            sqlDemoInserts.forEach
+            (
+                (sqlString)=>
+                {
+                    console.log(sqlString);
+
+                    req.query(sqlString)
+                    .then
+                    (
+                        (res)=>
+                        {
+                            console.log("Query Result: %O", res);
+                        }
+                    )
+                    .catch
+                    (
+                        (err)=>
+                        {
+                            console.error("Query Error: %O", err);
+                        }
+                    )
+                }
+            );
+            console.log("Encounter Statements: ", sqlEncounterInserts.length);
+            sqlEncounterInserts.forEach
+            (
+                (sqlString)=>
+                {
+                    console.log(sqlString);
+
+                    req.query(sqlString)
+                    .then
+                    (
+                        (res)=>
+                        {
+                            console.log("Query Result: %O", res);
+                        }
+                    )
+                    .catch
+                    (
+                        (err)=>
+                        {
+                            console.error("Query Error: %O", err);
+                        }
+                    )
+                }
+            );
+            console.log("Clinical Statements: ", sqlClinicalInserts.length);
+            sqlClinicalInserts.forEach
+            (
+                (sqlString)=>
+                {
+                    console.log(sqlString);
+
+                    req.query(sqlString)
+                    .then
+                    (
+                        (res)=>
+                        {
+                            console.log("Query Result: %O", res);
+                        }
+                    )
+                    .catch
+                    (
+                        (err)=>
+                        {
+                            console.error("Query Error: %O", err);
+                        }
+                    )
+                }
+            );
+        }
+    );
