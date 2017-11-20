@@ -1,6 +1,6 @@
 const fs = require('fs');
 const cheerio = require('cheerio'), cheerioTableParser = require('cheerio-tableparser');
-const sampleFilePath  = "C:\\Users\\paulr\\Google Drive\\nodeHTML2\\nodeHTML2\\application\\samples\\sample.html";
+const sampleFilePath  = "/Users/johnreineck/Google Drive/Clients/PWH/NodeExtraction/samples/sample3.html" //"C:\\Users\\paulr\\Google Drive\\nodeHTML2\\nodeHTML2\\application\\samples\\sample.html";
 const sql = require('mssql');
 const outputFileProblems = "C:\\Users\\paulr\\Google Drive\\nodeHTML2\\nodeHTML2\\application\\samples\\outputProblems.txt";
 const outputFileSurgicalHx = "C:\\Users\\paulr\\Google Drive\\nodeHTML2\\nodeHTML2\\application\\samples\\outputSurgicalHx.txt";
@@ -19,6 +19,8 @@ var writeVaccine=1;
 
 // File to Parse
 var html = fs.readFileSync(sampleFilePath).toString();
+var indexOfInverted = html.indexOf("<tr class='inverted '>");
+var htmlToLoad = html.substring(0,indexOfInverted);
 
 // SQL Insert Variables:
 var currentDOS;
@@ -233,22 +235,33 @@ for (var i=0; i<numEntries; i++)  //how many rows in table?
     }
     hxPregnancy["Birth Weight"] = hxPregnancy["Birth Weight"] + hxPregnancy[""]; // ounces get dumped in a header-less column...
     delete hxPregnancy[""];
-    hxPregnancies.push(JSON.stringify(hxPregnancy));    
+    hxPregnancies.push(JSON.stringify(hxPregnancy).replace('{','').replace('}','').replace('\"',''));    
 }
 hxPregnancies.forEach( (item)=>sqlClinicalInserts.push(`insert into [nodeHTML].[clinical_extraction] (patientId, sectionName, sectionContent) values ('${patientID}','HxPregnancies','${item}')`));
 
-// ENCOUNTERS
+// ENCOUNTERS   -- this will get the meat of the document
 encounterContent = [];
 $('.clinicalsummary').each(function (i,e) {
     currentSection = $(e).attr('sectionname');
     // This is associating way too many things with at LEAST the last DOS in the file, if not more.  Almost looks like cartesian product.  Experiment with "closest" operator
+    var next1 = $(e).next();
+    var next1Tag = $(next1).get().tagName;
+    var next2 = $(next1).next();
+    var nextThing = $(next1).tagName;
+    var nextNext2 = $(this).next().next().name;
+    var next2Tag = $(next2).get().tagName;
     
+
     if (currentSection)
     {
         if (currentSection ==="Patient")
         {
             var text = $(e).find('tr').find('td').eq(1).map(function() {
             currentDOS =    $(this).text().trim();
+            if (currentDOS==="01/04/2011 09:15AM" && currentSection ==="SignOff")
+            {
+                console.log("At last DOS + section that I want")
+            }
             }).get()
         }
     /*-------------------------------------------------
@@ -263,10 +276,12 @@ $('.clinicalsummary').each(function (i,e) {
         // console.log(currentDOS,': ',currentSection,sectionContent);
         // console.log('-------------------------------------------');
         // sqlEncounterInserts[i] =  `insert into [nodeHTML].[encounter_extraction] (patientId, DOS, sectionName, sectionContent) values ('${patientID}','${currentDOS}','${currentSection}','${sectionContent}')`;
+
+    
     }
 })
 uniqueEncounters = [...new Set(encounterContent)];
-console.log(encounterContent.length,uniqueEncounters.length);
+// console.log(encounterContent.length,uniqueEncounters.length);
 for (var i =0; i<uniqueEncounters.length; i++)
 {
     if (uniqueEncounters[i])
